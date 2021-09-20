@@ -1,4 +1,3 @@
 package birdy
 
-type AuthService interface {
-}
+type AuthService interface{}

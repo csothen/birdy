@@ -1,4 +1,3 @@
 package birdy
 
-type ChatService interface {
-}
+type ChatService interface{}
