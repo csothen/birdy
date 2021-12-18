@@ -1,2 +1,3 @@
 # birdy
-A Chatting Command Line Interface
+
+A Chatting Application
