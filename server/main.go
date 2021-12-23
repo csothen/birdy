@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/csothen/birdy/services/chat"
+	"github.com/csothen/birdy/chat"
 	"github.com/urfave/cli/v2"
 )
 
