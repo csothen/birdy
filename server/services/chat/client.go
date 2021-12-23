@@ -25,20 +25,18 @@ const (
 )
 
 type Client struct {
-	username string
+	Username string
 	conn     *websocket.Conn
 	send     chan []byte
-	server   *server
-	rooms    map[string]*Room
+	server   *Server
 }
 
-func NewClient(username string, conn *websocket.Conn, server *server) *Client {
+func NewClient(username string, conn *websocket.Conn, server *Server) *Client {
 	return &Client{
-		username: username,
+		Username: username,
 		conn:     conn,
 		send:     make(chan []byte),
 		server:   server,
-		rooms:    make(map[string]*Room),
 	}
 }
 
@@ -115,13 +113,10 @@ func (c *Client) handleMessage(payload []byte) {
 		return
 	}
 
-	m.Sender = c.username
+	m.Sender = c.Username
 	c.server.handler <- m
 }
 
 func (c *Client) disconnect() {
 	c.server.unregister <- c
-	for _, cr := range c.rooms {
-		cr.unregister <- c
-	}
 }

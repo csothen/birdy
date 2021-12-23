@@ -17,10 +17,11 @@ type Room struct {
 
 func NewRoom(name string, owner *Client) *Room {
 	room := &Room{
-		ID:         uuid.New().String(),
-		Name:       name,
-		Owner:      owner,
-		Clients:    make(map[*Client]struct{}),
+		ID:      uuid.New().String(),
+		Name:    name,
+		Owner:   owner,
+		Clients: make(map[*Client]struct{}),
+
 		send:       make(chan Message),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -50,7 +51,7 @@ func (r *Room) handleLeave(c *Client) {
 	delete(r.Clients, c)
 	if len(r.Clients) == 0 {
 		c.server.handler <- Message{
-			Sender:  r.Owner.username,
+			Sender:  r.Owner.Username,
 			Type:    DeleteRoom,
 			Content: r.ID,
 		}

@@ -16,21 +16,10 @@ const (
 	authRetryLimit = 5
 )
 
-// Server represents the Interface that a Chat Server should comply with
-type Server interface {
-	// Start will take an address and start the Chat Server on that Address
-	Start(addr string) error
-
-	// Run is responsible for listening for new messages that
-	// are sent across the connections established
-	Run()
-}
-
-// server is the implementation of the Server interface and represents
-// the actual Chat Server
-type server struct {
-	clients map[string]*Client
-	rooms   map[string]*Room
+// Server represents the Chat Server
+type Server struct {
+	Clients map[string]*Client
+	Rooms   map[string]*Room
 
 	handler    chan Message
 	register   chan *Client
@@ -40,13 +29,15 @@ type server struct {
 }
 
 // NewServer creates a new Server
-func NewServer() Server {
-	return &server{
-		clients:    make(map[string]*Client),
-		rooms:      make(map[string]*Room),
+func NewServer() *Server {
+	return &Server{
+		Clients: make(map[string]*Client),
+		Rooms:   make(map[string]*Room),
+
 		handler:    make(chan Message),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -56,19 +47,19 @@ func NewServer() Server {
 
 // Run is responsible for listening for new messages that
 // are sent across the connections established
-func (s *server) Run() {
+func (s *Server) Run() {
 	select {
 	case message := <-s.handler:
 		s.handleMessage(message)
 	case client := <-s.register:
-		s.clients[client.username] = client
+		s.handleClientConnect(client)
 	case client := <-s.unregister:
-		delete(s.clients, client.username)
+		s.handleClientDisconnect(client)
 	}
 }
 
 // Start will take an address and start the Chat Server on that Address
-func (s *server) Start(addr string) error {
+func (s *Server) Start(addr string) error {
 	http.HandleFunc("/ws", func(rw http.ResponseWriter, r *http.Request) {
 		s.serve(rw, r)
 	})
@@ -81,7 +72,7 @@ func (s *server) Start(addr string) error {
 // serve is responsible for taking the connection attempts
 // and handle them by upgrading the request to a connection,
 // authenticating the client and setting it up to read and write messages
-func (s *server) serve(rw http.ResponseWriter, r *http.Request) {
+func (s *Server) serve(rw http.ResponseWriter, r *http.Request) {
 	conn, err := s.upgrader.Upgrade(rw, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -111,7 +102,7 @@ func (s *server) serve(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) waitClientAuth(conn *websocket.Conn) error {
+func (s *Server) waitClientAuth(conn *websocket.Conn) error {
 	retries := 0
 	for {
 		retries++
@@ -139,7 +130,7 @@ func (s *server) waitClientAuth(conn *websocket.Conn) error {
 		}
 
 		username := message.Content
-		if _, ok := s.clients[username]; ok {
+		if _, ok := s.Clients[username]; ok {
 			log.Printf("username %s already taken", username)
 			continue
 		}
@@ -154,7 +145,18 @@ func (s *server) waitClientAuth(conn *websocket.Conn) error {
 	}
 }
 
-func (s *server) handleMessage(m Message) {
+func (s *Server) handleClientConnect(c *Client) {
+	s.Clients[c.Username] = c
+}
+
+func (s *Server) handleClientDisconnect(c *Client) {
+	delete(s.Clients, c.Username)
+	for _, room := range s.Rooms {
+		room.unregister <- c
+	}
+}
+
+func (s *Server) handleMessage(m Message) {
 	switch m.Type {
 	case SendMessage:
 		s.redirectMessage(m)
@@ -171,16 +173,16 @@ func (s *server) handleMessage(m Message) {
 	}
 }
 
-func (s *server) redirectMessage(m Message) {
+func (s *Server) redirectMessage(m Message) {
 	if m.IsDM {
-		client, ok := s.clients[m.Target]
+		client, ok := s.Clients[m.Target]
 		if !ok {
 			log.Printf("the target client (%s) does not exist", m.Target)
 			return
 		}
 		client.send <- m.encode()
 	} else {
-		room, ok := s.rooms[m.Target]
+		room, ok := s.Rooms[m.Target]
 		if !ok {
 			log.Printf("the target room (%s) does not exist", m.Target)
 			return
@@ -189,14 +191,14 @@ func (s *server) redirectMessage(m Message) {
 	}
 }
 
-func (s *server) addClientToRoom(m Message) {
-	sender, ok := s.clients[m.Sender]
+func (s *Server) addClientToRoom(m Message) {
+	sender, ok := s.Clients[m.Sender]
 	if !ok {
 		log.Printf("can't join room, sender (%s) does not exist", m.Sender)
 		return
 	}
 
-	room, ok := s.rooms[m.Target]
+	room, ok := s.Rooms[m.Target]
 	if !ok {
 		log.Printf("can't join room, room (%s) does not exist", m.Target)
 		return
@@ -205,14 +207,14 @@ func (s *server) addClientToRoom(m Message) {
 	room.register <- sender
 }
 
-func (s *server) removeClientFromRoom(m Message) {
-	sender, ok := s.clients[m.Sender]
+func (s *Server) removeClientFromRoom(m Message) {
+	sender, ok := s.Clients[m.Sender]
 	if !ok {
 		log.Printf("can't leave room, sender (%s) does not exist", m.Sender)
 		return
 	}
 
-	room, ok := s.rooms[m.Target]
+	room, ok := s.Rooms[m.Target]
 	if !ok {
 		log.Printf("can't leave room, room (%s) does not exist", m.Target)
 		return
@@ -221,25 +223,25 @@ func (s *server) removeClientFromRoom(m Message) {
 	room.unregister <- sender
 }
 
-func (s *server) createRoom(m Message) {
+func (s *Server) createRoom(m Message) {
 	name := m.Target
-	room := NewRoom(name, s.clients[m.Sender])
+	room := NewRoom(name, s.Clients[m.Sender])
 
-	s.rooms[room.ID] = room
+	s.Rooms[room.ID] = room
 }
 
-func (s *server) deleteRoom(m Message) {
+func (s *Server) deleteRoom(m Message) {
 	name := m.Target
-	room, ok := s.rooms[name]
+	room, ok := s.Rooms[name]
 	if !ok {
 		log.Printf("can't delete room, room (%s) does not exist", name)
 		return
 	}
 
-	if room.Owner.username != m.Sender {
+	if room.Owner.Username != m.Sender {
 		log.Printf("can't delete room, user does not own the room")
 		return
 	}
 
-	delete(s.rooms, name)
+	delete(s.Rooms, name)
 }
