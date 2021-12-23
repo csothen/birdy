@@ -6,19 +6,22 @@ import (
 )
 
 const (
-	Join Action = iota
-	Leave
-	Send
-	Notify
+	JoinRoom Type = iota
+	LeaveRoom
+	CreateRoom
+	DeleteRoom
+	SendMessage
+	Authenticate
 )
 
-type Action int
+type Type int
 
 type Message struct {
-	Action  Action
-	Sender  *Client
-	Content string
-	Target  string
+	IsDM    bool   `json:"isDM"`
+	Target  string `json:"target"`
+	Sender  string `json:"sender"`
+	Type    Type   `json:"type"`
+	Content string `json:"content"`
 }
 
 func (m *Message) encode() []byte {

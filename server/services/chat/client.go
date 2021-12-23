@@ -5,7 +5,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/csothen/birdy/services/auth"
 	"github.com/gorilla/websocket"
 )
 
@@ -26,23 +25,20 @@ const (
 )
 
 type Client struct {
-	// User represents the user that established the connection
-	// Can be nil in cases where the user is not logged in
-	User *auth.User
-
-	conn   *websocket.Conn
-	send   chan []byte
-	server *server
-	rooms  map[string]*ChatRoom
+	username string
+	conn     *websocket.Conn
+	send     chan []byte
+	server   *server
+	rooms    map[string]*Room
 }
 
-func NewClient(user *auth.User, conn *websocket.Conn, server *server) *Client {
+func NewClient(username string, conn *websocket.Conn, server *server) *Client {
 	return &Client{
-		User:   user,
-		conn:   conn,
-		send:   make(chan []byte),
-		server: server,
-		rooms:  make(map[string]*ChatRoom),
+		username: username,
+		conn:     conn,
+		send:     make(chan []byte),
+		server:   server,
+		rooms:    make(map[string]*Room),
 	}
 }
 
@@ -119,42 +115,8 @@ func (c *Client) handleMessage(payload []byte) {
 		return
 	}
 
-	m.Sender = c
-	switch m.Action {
-	case Send:
-		c.handleSend(m)
-	case Join:
-		c.handleJoin(m)
-	case Leave:
-		c.handleLeave(m)
-	}
-}
-
-func (c *Client) handleSend(m Message) {
-	room, ok := c.rooms[m.Target]
-	if !ok {
-		return
-	}
-
-	room.broadcast <- m.encode()
-}
-
-func (c *Client) handleJoin(m Message) {
-	room, ok := c.rooms[m.Target]
-	if !ok {
-		return
-	}
-
-	room.register <- c
-}
-
-func (c *Client) handleLeave(m Message) {
-	room, ok := c.rooms[m.Target]
-	if !ok {
-		return
-	}
-
-	room.unregister <- c
+	m.Sender = c.username
+	c.server.handler <- m
 }
 
 func (c *Client) disconnect() {
