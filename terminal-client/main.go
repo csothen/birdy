@@ -9,8 +9,7 @@ import (
 )
 
 func main() {
-	establishConnection()
-	ui.Render()
+	ui.Start()
 }
 
 func establishConnection() {

@@ -1,175 +1,111 @@
 package ui
 
 import (
-	"errors"
 	"fmt"
-	"log"
-	"strings"
+	"os"
 
-	"github.com/jroimartin/gocui"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-const delta = 0.2
-
-type HelpWidget struct {
-	name string
-	x, y int
-	w, h int
-	body string
+type model struct {
+	choices  []string         // items on the to-do list
+	cursor   int              // which to-do list item our cursor is pointing at
+	selected map[int]struct{} // which to-do items are selected
 }
 
-func NewHelpWidget(name string, x, y int, body string) *HelpWidget {
-	lines := strings.Split(body, "\n")
+func initialModel() model {
+	return model{
+		// Our shopping list is a grocery list
+		choices: []string{"Buy carrots", "Buy celery", "Buy kohlrabi"},
 
-	w := 0
-	for _, l := range lines {
-		if len(l) > w {
-			w = len(l)
-		}
+		// A map which indicates which choices are selected. We're using
+		// the  map like a mathematical set. The keys refer to the indexes
+		// of the `choices` slice, above.
+		selected: make(map[int]struct{}),
 	}
-	h := len(lines) + 1
-	w = w + 1
-
-	return &HelpWidget{name: name, x: x, y: y, w: w, h: h, body: body}
 }
 
-func (w *HelpWidget) Layout(g *gocui.Gui) error {
-	v, err := g.SetView(w.name, w.x, w.y, w.x+w.w, w.y+w.h)
-	if err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		fmt.Fprint(v, w.body)
-	}
+func (m model) Init() tea.Cmd {
+	// Just return `nil`, which means "no I/O right now, please."
 	return nil
 }
 
-type StatusbarWidget struct {
-	name string
-	x, y int
-	w    int
-	val  float64
-}
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 
-func NewStatusbarWidget(name string, x, y, w int) *StatusbarWidget {
-	return &StatusbarWidget{name: name, x: x, y: y, w: w}
-}
+	// Is it a key press?
+	case tea.KeyMsg:
 
-func (w *StatusbarWidget) SetVal(val float64) error {
-	if val < 0 || val > 1 {
-		return errors.New("invalid value")
-	}
-	w.val = val
-	return nil
-}
+		// Cool, what was the actual key pressed?
+		switch msg.String() {
 
-func (w *StatusbarWidget) Val() float64 {
-	return w.val
-}
+		// These keys should exit the program.
+		case "ctrl+c", "q":
+			return m, tea.Quit
 
-func (w *StatusbarWidget) Layout(g *gocui.Gui) error {
-	v, err := g.SetView(w.name, w.x, w.y, w.x+w.w, w.y+2)
-	if err != nil && err != gocui.ErrUnknownView {
-		return err
-	}
-	v.Clear()
+		// The "up" and "k" keys move the cursor up
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
 
-	rep := int(w.val * float64(w.w-1))
-	fmt.Fprint(v, strings.Repeat("▒", rep))
-	return nil
-}
+		// The "down" and "j" keys move the cursor down
+		case "down", "j":
+			if m.cursor < len(m.choices)-1 {
+				m.cursor++
+			}
 
-type ButtonWidget struct {
-	name    string
-	x, y    int
-	w       int
-	label   string
-	handler func(g *gocui.Gui, v *gocui.View) error
-}
-
-func NewButtonWidget(name string, x, y int, label string, handler func(g *gocui.Gui, v *gocui.View) error) *ButtonWidget {
-	return &ButtonWidget{name: name, x: x, y: y, w: len(label) + 1, label: label, handler: handler}
-}
-
-func (w *ButtonWidget) Layout(g *gocui.Gui) error {
-	v, err := g.SetView(w.name, w.x, w.y, w.x+w.w, w.y+2)
-	if err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+		// The "enter" key and the spacebar (a literal space) toggle
+		// the selected state for the item that the cursor is pointing at.
+		case "enter", " ":
+			_, ok := m.selected[m.cursor]
+			if ok {
+				delete(m.selected, m.cursor)
+			} else {
+				m.selected[m.cursor] = struct{}{}
+			}
 		}
-		if _, err := g.SetCurrentView(w.name); err != nil {
-			return err
+	}
+
+	// Return the updated model to the Bubble Tea runtime for processing.
+	// Note that we're not returning a command.
+	return m, nil
+}
+
+func (m model) View() string {
+	// The header
+	s := "What should we buy at the market?\n\n"
+
+	// Iterate over our choices
+	for i, choice := range m.choices {
+
+		// Is the cursor pointing at this choice?
+		cursor := " " // no cursor
+		if m.cursor == i {
+			cursor = ">" // cursor!
 		}
-		if err := g.SetKeybinding(w.name, gocui.KeyEnter, gocui.ModNone, w.handler); err != nil {
-			return err
+
+		// Is this choice selected?
+		checked := " " // not selected
+		if _, ok := m.selected[i]; ok {
+			checked = "x" // selected!
 		}
-		fmt.Fprint(v, w.label)
+
+		// Render the row
+		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
 	}
-	return nil
+
+	// The footer
+	s += "\nPress q to quit.\n"
+
+	// Send the UI for rendering
+	return s
 }
 
-func Render() {
-	g, err := gocui.NewGui(gocui.OutputNormal)
-	if err != nil {
-		log.Panicln(err)
-	}
-	defer g.Close()
-
-	g.Highlight = true
-	g.SelFgColor = gocui.ColorRed
-
-	help := NewHelpWidget("help", 1, 1, helpText)
-	status := NewStatusbarWidget("status", 1, 7, 50)
-	butdown := NewButtonWidget("butdown", 52, 7, "DOWN", statusDown(status))
-	butup := NewButtonWidget("butup", 58, 7, "UP", statusUp(status))
-	g.SetManager(help, status, butdown, butup)
-
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, toggleButton); err != nil {
-		log.Panicln(err)
-	}
-
-	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-		log.Panicln(err)
+func Start() {
+	p := tea.NewProgram(initialModel())
+	if err := p.Start(); err != nil {
+		fmt.Printf("Alas, there's been an error: %v", err)
+		os.Exit(1)
 	}
 }
-
-func quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
-}
-
-func toggleButton(g *gocui.Gui, v *gocui.View) error {
-	nextview := "butdown"
-	if v != nil && v.Name() == "butdown" {
-		nextview = "butup"
-	}
-	_, err := g.SetCurrentView(nextview)
-	return err
-}
-
-func statusUp(status *StatusbarWidget) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
-		return statusSet(status, delta)
-	}
-}
-
-func statusDown(status *StatusbarWidget) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
-		return statusSet(status, -delta)
-	}
-}
-
-func statusSet(sw *StatusbarWidget, inc float64) error {
-	val := sw.Val() + inc
-	if val < 0 || val > 1 {
-		return nil
-	}
-	return sw.SetVal(val)
-}
-
-const helpText = `KEYBINDINGS
-Tab: Move between buttons
-Enter: Push button
-^C: Exit`
