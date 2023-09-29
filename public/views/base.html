@@ -1,0 +1,58 @@
+{{ block "head" . }}
+<head>
+    <title>{{ .Title }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.15/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/htmx.org@1.9.4"
+        integrity="sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV"
+        crossorigin="anonymous"></script>
+    <style>
+        html,
+        body {
+            height: 100%
+        }
+    </style>
+</head>
+{{ end }}
+
+{{ block "header" . }}
+<header class="absolute top-0 w-screen bg-blue-500 p-4">
+    <nav class="flex items-center justify-between">
+        <div class="text-white font-bold text-xl">Your Website</div>
+        <ul class="flex space-x-4">
+            <li><a href="#" class="text-white hover:text-gray-300">Home</a></li>
+            <li><a href="#" class="text-white hover:text-gray-300">About</a></li>
+            <li><a href="#" class="text-white hover:text-gray-300">Services</a></li>
+            <li><a href="#" class="text-white hover:text-gray-300">Contact</a></li>
+        </ul>
+    </nav>
+</header>
+{{ end }}
+
+{{ block "footer" . }}
+<footer class="absolute bottom-0 w-screen bg-gray-900 text-white p-4">
+    <div class="container mx-auto">
+        <div class="flex justify-between items-center">
+            <div>&copy; 2023 Your Website</div>
+            <ul class="flex space-x-4">
+                <li><a href="#" class="hover:text-gray-300">Privacy Policy</a></li>
+                <li><a href="#" class="hover:text-gray-300">Terms of Service</a></li>
+                <li><a href="#" class="hover:text-gray-300">Sitemap</a></li>
+            </ul>
+        </div>
+    </div>
+</footer>
+{{ end}}
+
+{{ block "base" . }}
+<!DOCTYPE html>
+<html lang="en">
+{{ template "head" .Head }}
+<body class="bg-gray-100 flex-grow">
+    {{ template "header" . }}
+    {{ template "login" .}}
+    {{ template "footer" . }}
+</body>
+</html>
+{{ end }}

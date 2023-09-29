@@ -1,14 +1,11 @@
-package main
+package birdy
 
 import (
 	"bytes"
-	"fmt"
 	"log"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/labstack/echo/v4"
 )
 
 const (
@@ -26,102 +23,17 @@ const (
 )
 
 var (
-	id      = 1
 	newline = []byte{'\n'}
 	space   = []byte{' '}
 )
 
-type Room struct {
-	id         int
-	clients    map[*Client]bool
-	broadcast  chan []byte
-	register   chan *Client
-	unregister chan *Client
-}
-
-type Client struct {
+type client struct {
 	room *Room
 	conn *websocket.Conn
 	send chan []byte
 }
 
-func main() {
-
-	e := echo.New()
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  4096,
-		WriteBufferSize: 4096,
-	}
-
-	rooms := map[int]*Room{}
-
-	generalRoom := &Room{
-		id:         id,
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-	}
-	id++
-
-	rooms[generalRoom.id] = generalRoom
-	go generalRoom.run()
-
-	e.File("/", "home.html")
-
-	e.GET("/connect/:room", func(c echo.Context) error {
-		conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
-		if err != nil {
-			return err
-		}
-
-		roomParam := c.Param("room")
-		roomId, err := strconv.Atoi(roomParam)
-		if err != nil {
-			return err
-		}
-
-		room, ok := rooms[roomId]
-		if !ok {
-			return fmt.Errorf("room with ID '%d' does not exist", roomId)
-		}
-
-		client := &Client{room: room, conn: conn, send: make(chan []byte)}
-		client.room.register <- client
-
-		go client.writePump()
-		go client.readPump()
-
-		return nil
-	})
-
-	e.Logger.Fatal(e.Start(":8080"))
-}
-
-func (r *Room) run() {
-	for {
-		select {
-		case client := <-r.register:
-			r.clients[client] = true
-		case client := <-r.unregister:
-			if _, ok := r.clients[client]; ok {
-				delete(r.clients, client)
-				close(client.send)
-			}
-		case message := <-r.broadcast:
-			for client := range r.clients {
-				select {
-				case client.send <- message:
-				default:
-					close(client.send)
-					delete(r.clients, client)
-				}
-			}
-		}
-	}
-}
-
-func (c *Client) readPump() {
+func (c *client) readPump() {
 	defer func() {
 		c.room.unregister <- c
 		c.conn.Close()
@@ -142,7 +54,7 @@ func (c *Client) readPump() {
 	}
 }
 
-func (c *Client) writePump() {
+func (c *client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
