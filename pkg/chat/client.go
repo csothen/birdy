@@ -1,10 +1,11 @@
-package birdy
+package chat
 
 import (
 	"bytes"
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -28,21 +29,31 @@ var (
 )
 
 type client struct {
-	room *Room
+	ID       uuid.UUID
+	Username string
+
+	connections map[uuid.UUID]*connection
+}
+
+type connection struct {
+	room *room
 	conn *websocket.Conn
 	send chan []byte
 }
 
-func (c *client) readPump() {
+func (c *client) readPump(roomId uuid.UUID) {
+	connection := c.connections[roomId]
+
 	defer func() {
-		c.room.unregister <- c
-		c.conn.Close()
+		connection.room.unregister <- c
+		connection.conn.Close()
+		delete(c.connections, roomId)
 	}()
-	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	connection.conn.SetReadLimit(maxMessageSize)
+	connection.conn.SetReadDeadline(time.Now().Add(pongWait))
+	connection.conn.SetPongHandler(func(string) error { connection.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
-		_, message, err := c.conn.ReadMessage()
+		_, message, err := connection.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("error: %v", err)
@@ -50,45 +61,48 @@ func (c *client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.room.broadcast <- message
+		connection.room.broadcast <- message
 	}
 }
 
-func (c *client) writePump() {
+func (c *client) writePump(roomId uuid.UUID) {
+	connection := c.connections[roomId]
 	ticker := time.NewTicker(pingPeriod)
+
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		connection.conn.Close()
+		delete(c.connections, roomId)
 	}()
 	for {
 		select {
-		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+		case message, ok := <-connection.send:
+			connection.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The room closed the channel.
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				connection.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			w, err := c.conn.NextWriter(websocket.TextMessage)
+			w, err := connection.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
 				return
 			}
 			w.Write(message)
 
 			// Add queued chat messages to the current websocket message.
-			n := len(c.send)
+			n := len(connection.send)
 			for i := 0; i < n; i++ {
 				w.Write(newline)
-				w.Write(<-c.send)
+				w.Write(<-connection.send)
 			}
 
 			if err := w.Close(); err != nil {
 				return
 			}
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+			connection.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := connection.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}

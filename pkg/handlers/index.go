@@ -1,17 +1,14 @@
 package handlers
 
-import "github.com/labstack/echo/v4"
-
-type IndexPage struct {
-	Head HeadData
-}
-
-type HeadData struct {
-	Title string
-}
+import (
+	"github.com/csothen/birdy/pkg/pages"
+	"github.com/labstack/echo/v4"
+)
 
 func (h *Handler) Index(c echo.Context) error {
-	return c.Render(200, "base", IndexPage{
-		Head: HeadData{"Birdy"},
-	})
+	page := pages.IndexPage{
+		Head: pages.HeadData{Title: "Birdy"},
+	}
+
+	return c.Render(200, page.Template(), page)
 }
