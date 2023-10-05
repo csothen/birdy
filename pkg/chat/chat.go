@@ -11,6 +11,7 @@ import (
 type Service interface {
 	ConnectClient(clientname string) error
 	DisconnectClient(clientId uuid.UUID) error
+	ListRooms() []*room
 	CreateRoom(clientId uuid.UUID, name string) (*room, error)
 	DeleteRoom(clientId, roomId uuid.UUID) error
 	JoinRoom(conn *websocket.Conn, clientId, roomId uuid.UUID) (*room, error)
@@ -30,35 +31,43 @@ func NewService() Service {
 	}
 }
 
-func (c *service) ConnectClient(clientname string) error {
+func (s *service) ConnectClient(clientname string) error {
 	clientId, err := uuid.NewUUID()
 	if err != nil {
 		return err
 	}
 
 	client := &client{ID: clientId, Username: clientname, connections: make(map[uuid.UUID]*connection)}
-	c.clients[clientId] = client
+	s.clients[clientId] = client
 
 	return nil
 }
 
-func (c *service) DisconnectClient(clientId uuid.UUID) error {
-	client, ok := c.clients[clientId]
+func (s *service) DisconnectClient(clientId uuid.UUID) error {
+	client, ok := s.clients[clientId]
 	if !ok {
 		return fmt.Errorf("client with ID '%s' was not found", clientId.String())
 	}
 
 	for roomId := range client.connections {
-		room := c.rooms[roomId]
+		room := s.rooms[roomId]
 		room.unregister <- client
 	}
-	delete(c.clients, clientId)
+	delete(s.clients, clientId)
 
 	return nil
 }
 
-func (c *service) CreateRoom(clientId uuid.UUID, name string) (*room, error) {
-	owner, ok := c.clients[clientId]
+func (s *service) ListRooms() []*room {
+	rooms := []*room{}
+	for _, r := range s.rooms {
+		rooms = append(rooms, r)
+	}
+	return rooms
+}
+
+func (s *service) CreateRoom(clientId uuid.UUID, name string) (*room, error) {
+	owner, ok := s.clients[clientId]
 	if !ok {
 		return nil, fmt.Errorf("client with ID '%s' was not found", clientId.String())
 	}
@@ -78,14 +87,14 @@ func (c *service) CreateRoom(clientId uuid.UUID, name string) (*room, error) {
 		unregister: make(chan *client),
 	}
 
-	c.rooms[roomId] = room
+	s.rooms[roomId] = room
 	go room.run()
 
 	return room, nil
 }
 
-func (c *service) DeleteRoom(clientId, roomId uuid.UUID) error {
-	room, ok := c.rooms[roomId]
+func (s *service) DeleteRoom(clientId, roomId uuid.UUID) error {
+	room, ok := s.rooms[roomId]
 	if !ok {
 		return fmt.Errorf("room with ID '%s' was not found", roomId.String())
 	}
@@ -98,17 +107,17 @@ func (c *service) DeleteRoom(clientId, roomId uuid.UUID) error {
 		room.unregister <- client
 	}
 
-	delete(c.rooms, roomId)
+	delete(s.rooms, roomId)
 	return nil
 }
 
-func (c *service) JoinRoom(conn *websocket.Conn, clientId, roomId uuid.UUID) (*room, error) {
-	joiner, ok := c.clients[clientId]
+func (s *service) JoinRoom(conn *websocket.Conn, clientId, roomId uuid.UUID) (*room, error) {
+	joiner, ok := s.clients[clientId]
 	if !ok {
 		return nil, fmt.Errorf("client with ID '%s' was not found", clientId.String())
 	}
 
-	room, ok := c.rooms[roomId]
+	room, ok := s.rooms[roomId]
 	if !ok {
 		return nil, fmt.Errorf("room with ID '%s' was not found", roomId.String())
 	}
@@ -124,13 +133,13 @@ func (c *service) JoinRoom(conn *websocket.Conn, clientId, roomId uuid.UUID) (*r
 	return room, nil
 }
 
-func (c *service) LeaveRoom(clientId uuid.UUID, roomId uuid.UUID) error {
-	client, ok := c.clients[clientId]
+func (s *service) LeaveRoom(clientId uuid.UUID, roomId uuid.UUID) error {
+	client, ok := s.clients[clientId]
 	if !ok {
 		return fmt.Errorf("client with ID '%s' was not found", clientId.String())
 	}
 
-	room, ok := c.rooms[roomId]
+	room, ok := s.rooms[roomId]
 	if !ok {
 		return fmt.Errorf("room with ID '%s' does not exist", roomId.String())
 	}

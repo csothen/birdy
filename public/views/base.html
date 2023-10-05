@@ -7,6 +7,12 @@
     <script src="https://unpkg.com/htmx.org@1.9.4"
         integrity="sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV"
         crossorigin="anonymous"></script>
+    <script>
+        document.body.addEventListener('htmx:responseError', function (e) {
+            e.detail.shouldSwap = true
+            e.detail.target = htmx.find("body")
+        });
+    </script>
     <style>
         html,
         body {

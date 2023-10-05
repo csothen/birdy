@@ -2,43 +2,53 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/csothen/birdy/pkg/pages"
 	"github.com/labstack/echo/v4"
 )
 
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `form:"username"`
+	Password string `form:"password"`
 }
 
 func (h *Handler) Login(c echo.Context) error {
 	var lr LoginRequest
 
 	if err := c.Bind(&lr); err != nil {
-		page := pages.ErrorPage{
-			Code:  http.StatusBadRequest,
-			Error: err,
-		}
+		c.Logger().Errorf("could not bind payload: %+v", err)
+		return c.String(400, "invalid payload")
+	}
 
-		return c.Render(200, page.Template(), page)
+	user, token, err := h.authService.Authenticate(lr.Username, lr.Password)
+	if err != nil {
+		c.Logger().Warnf("could not authenticate user: %+v", err)
+		return c.String(401, "invalid username and password")
 	}
 
 	c.SetCookie(&http.Cookie{
-		Name:    "authentication-token",
-		Value:   "token",
-		Expires: time.Now().Add(30 * time.Minute),
+		Name:    authCookieName,
+		Value:   token.Value,
+		Expires: token.Expiration,
 	})
+
+	rooms := h.chatService.ListRooms()
+	roomsList := []pages.RoomData{}
+	for _, r := range rooms {
+		roomsList = append(roomsList, pages.RoomData{
+			ID:   r.ID.String(),
+			Name: r.Name,
+		})
+	}
 
 	page := pages.IndexPage{
 		Head: pages.HeadData{
 			Title: "Chat Lobby",
 		},
 		User: &pages.UserData{
-			Username: "username",
+			Username: user.Username,
 		},
-		Rooms: []pages.RoomData{},
+		Rooms: roomsList,
 	}
 	return c.Render(200, page.Template(), page)
 }

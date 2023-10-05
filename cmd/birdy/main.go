@@ -9,6 +9,7 @@ import (
 	"github.com/csothen/birdy/pkg/handlers"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 )
 
 type TemplateRenderer struct {
@@ -35,10 +36,12 @@ func main() {
 		templates: tmpls,
 	}
 
+	e.Logger.SetLevel(log.DEBUG)
 	e.Use(middleware.Logger())
 
 	e.GET("/", handler.Index)
-	e.GET("/join/:room", handler.JoinRoom)
+	e.POST("/login", handler.Login)
+	e.GET("/rooms/:id/join", handler.Protected(handler.JoinRoom))
 
 	e.Logger.Fatal(e.Start(":8080"))
 }
