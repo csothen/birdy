@@ -6,6 +6,38 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+func (h *Handler) GetRoom(c echo.Context) error {
+	val := c.Get(userContextKey)
+	if val == nil {
+		c.Logger().Infof("attempt to join room without token")
+		return c.String(401, "unauthorized")
+	}
+
+	idParam := c.Param("id")
+	roomId, err := uuid.ParseBytes([]byte(idParam))
+	if err != nil {
+		c.Logger().Errorf("error parsing ID param to UUID: %+v", err)
+		return c.String(400, "room ID must be a valid UUID")
+	}
+
+	r, err := h.chatService.GetRoom(roomId)
+	if err != nil {
+		c.Logger().Errorf("error retrieving room with id '%s': %+v", roomId.String(), err)
+		return c.String(500, "could not get room")
+	}
+
+	if r == nil {
+		return c.String(404, "room not found")
+	}
+
+	page := room{
+		ID:   r.ID.String(),
+		Name: r.Name,
+	}
+
+	return c.Render(200, "room", page)
+}
+
 func (h *Handler) JoinRoom(c echo.Context) error {
 	val := c.Get(userContextKey)
 	if val == nil {
@@ -26,17 +58,16 @@ func (h *Handler) JoinRoom(c echo.Context) error {
 	}
 
 	idParam := c.Param("id")
-	roomId, err := uuid.FromBytes([]byte(idParam))
+	roomId, err := uuid.ParseBytes([]byte(idParam))
 	if err != nil {
-		c.Logger().Errorf("error converting ID param to int: %+v", err)
-		return c.String(400, "room ID must be a string")
+		c.Logger().Errorf("error converting ID param to UUID: %+v", err)
+		return c.String(400, "room ID must be a valid UUID")
 	}
 
-	room, err := h.chatService.JoinRoom(conn, user.ID, roomId)
-	if err != nil {
+	if err := h.chatService.JoinRoom(conn, user.ID, roomId); err != nil {
 		c.Logger().Errorf("error joining room: %+v", err)
 		return c.String(500, "error joining room")
 	}
 
-	return c.Render(200, "room", room)
+	return nil
 }

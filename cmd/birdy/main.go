@@ -41,6 +41,7 @@ func main() {
 
 	e.GET("/", handler.Index)
 	e.POST("/login", handler.Login)
+	e.GET("/rooms/:id", handler.Protected(handler.GetRoom))
 	e.GET("/rooms/:id/join", handler.Protected(handler.JoinRoom))
 
 	e.Logger.Fatal(e.Start(":8080"))

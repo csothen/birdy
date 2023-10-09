@@ -25,7 +25,7 @@
 {{ block "header" . }}
 <header class="absolute top-0 w-screen bg-blue-500 p-4">
     <nav class="flex items-center justify-between">
-        <div class="text-white font-bold text-xl">Your Website</div>
+        <div class="text-white font-bold text-xl">Birdy</div>
         <ul class="flex space-x-4">
             <li><a href="#" class="text-white hover:text-gray-300">Home</a></li>
             <li><a href="#" class="text-white hover:text-gray-300">About</a></li>
@@ -40,7 +40,7 @@
 <footer class="absolute bottom-0 w-screen bg-gray-900 text-white p-4">
     <div class="container mx-auto">
         <div class="flex justify-between items-center">
-            <div>&copy; 2023 Your Website</div>
+            <div>&copy; 2023 Birdy</div>
             <ul class="flex space-x-4">
                 <li><a href="#" class="hover:text-gray-300">Privacy Policy</a></li>
                 <li><a href="#" class="hover:text-gray-300">Terms of Service</a></li>
@@ -54,10 +54,16 @@
 {{ block "base" . }}
 <!DOCTYPE html>
 <html lang="en">
-{{ template "head" .Head }}
+{{ template "head" .Metadata }}
 <body class="bg-gray-100 flex-grow">
     {{ template "header" . }}
-    {{ template "login" .}}
+    <div id="content" class="h-full py-16">
+        {{ if .IsLoggedIn }}
+        {{ template "lobby" . }}
+        {{ else }}
+        {{ template "login" . }}
+        {{ end }}
+    </div>
     {{ template "footer" . }}
 </body>
 </html>

@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/csothen/birdy/pkg/pages"
 	"github.com/labstack/echo/v4"
 )
 
@@ -20,7 +19,7 @@ func (h *Handler) Login(c echo.Context) error {
 		return c.String(400, "invalid payload")
 	}
 
-	user, token, err := h.authService.Authenticate(lr.Username, lr.Password)
+	u, token, err := h.authService.Authenticate(lr.Username, lr.Password)
 	if err != nil {
 		c.Logger().Warnf("could not authenticate user: %+v", err)
 		return c.String(401, "invalid username and password")
@@ -32,23 +31,20 @@ func (h *Handler) Login(c echo.Context) error {
 		Expires: token.Expiration,
 	})
 
-	rooms := h.chatService.ListRooms()
-	roomsList := []pages.RoomData{}
-	for _, r := range rooms {
-		roomsList = append(roomsList, pages.RoomData{
+	sRooms := h.chatService.ListRooms()
+	rooms := []room{}
+	for _, r := range sRooms {
+		rooms = append(rooms, room{
 			ID:   r.ID.String(),
 			Name: r.Name,
 		})
 	}
 
-	page := pages.IndexPage{
-		Head: pages.HeadData{
-			Title: "Chat Lobby",
-		},
-		User: &pages.UserData{
-			Username: user.Username,
-		},
-		Rooms: roomsList,
+	loggedInPage := indexPage{
+		Metadata:   metadata{"Birdy | Lobby"},
+		IsLoggedIn: true,
+		User:       user{Username: u.Username},
+		Rooms:      rooms,
 	}
-	return c.Render(200, page.Template(), page)
+	return c.Render(200, "base", loggedInPage)
 }

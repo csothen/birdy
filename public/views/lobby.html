@@ -1,0 +1,22 @@
+{{ block "lobby" . }}
+<div class="flex justify-center">
+    <div class="font-bold text-3xl pt-4">Chat Lobby</div>
+</div>
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-semibold mb-4">Available Chat Rooms</h1>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {{ range .Rooms }}
+        {{ template "room-item" . }}
+        {{ end }}
+    </div>
+</div>
+{{ end }}
+
+{{ block "room-item" . }}
+<div class="bg-white p-4 rounded-lg shadow-md">
+    <h2 class="text-lg font-semibold mb-2">{{ .Name }}</h2>
+    <div hx-get="/rooms/{{ .ID }}" hx-trigger="click delay:200ms from:#join-room-{{ .ID }}" hx-target="#content"></div>
+    <button hx-ext="ws" ws-connect="/rooms/{{ .ID }}/join" id="join-room-{{ .ID }}"
+        class="mt-4 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">Join</button>
+</div>
+{{ end }}
